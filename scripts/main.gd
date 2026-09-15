@@ -233,7 +233,6 @@ func _on_start_game() -> void:
 	_ui.set_menu_visible(false)
 	start_round(true)
 
-
 func _on_apply_and_restart(cfg_from_ui: Dictionary) -> void:
 	_ui.cfg = cfg_from_ui
 	start_round(true)
