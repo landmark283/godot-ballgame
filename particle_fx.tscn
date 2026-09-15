@@ -1,0 +1,123 @@
+[gd_scene load_steps=21 format=3]
+
+[ext_resource type="Script" path="res://scripts/particle_fx.gd" id="1_fx"]
+
+[sub_resource type="Gradient" id="Grad_burst"]
+offsets = PackedFloat32Array(0, 0.25, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0.85, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GT_burst"]
+gradient = SubResource("Grad_burst")
+
+[sub_resource type="Curve" id="Curve_burst_scale"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.15), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CT_burst_scale"]
+curve = SubResource("Curve_burst_scale")
+
+[sub_resource type="ParticleProcessMaterial" id="PPM_burst"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 1.0
+direction = Vector3(0, -1, 0)
+spread = 45.0
+initial_velocity_min = 100.0
+initial_velocity_max = 220.0
+damping_min = 20.0
+damping_max = 60.0
+gravity = Vector3(0, 60, 0)
+scale_min = 1.6
+scale_max = 3.2
+scale_curve = SubResource("CT_burst_scale")
+color_ramp = SubResource("GT_burst")
+
+[sub_resource type="Gradient" id="Grad_ring"]
+offsets = PackedFloat32Array(0, 0.2, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0.9, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GT_ring"]
+gradient = SubResource("Grad_ring")
+
+[sub_resource type="Curve" id="Curve_ring_scale"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CT_ring_scale"]
+curve = SubResource("Curve_ring_scale")
+
+[sub_resource type="ParticleProcessMaterial" id="PPM_ring"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 1.0
+direction = Vector3(0, -1, 0)
+spread = 180.0
+initial_velocity_min = 60.0
+initial_velocity_max = 260.0
+damping_min = 10.0
+damping_max = 40.0
+gravity = Vector3(0, 40, 0)
+scale_min = 1.8
+scale_max = 4.0
+scale_curve = SubResource("CT_ring_scale")
+color_ramp = SubResource("GT_ring")
+
+[sub_resource type="Gradient" id="Grad_trail"]
+offsets = PackedFloat32Array(0, 0.35, 1)
+colors = PackedColorArray(1, 1, 1, 0.9, 1, 1, 1, 0.5, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GT_trail"]
+gradient = SubResource("Grad_trail")
+
+[sub_resource type="Curve" id="Curve_trail_scale"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.2), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CT_trail_scale"]
+curve = SubResource("Curve_trail_scale")
+
+[sub_resource type="ParticleProcessMaterial" id="PPM_trail"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 4.0
+direction = Vector3(0, -1, 0)
+spread = 25.0
+initial_velocity_min = 4.0
+initial_velocity_max = 26.0
+damping_min = 40.0
+damping_max = 90.0
+gravity = Vector3(0, 0, 0)
+scale_min = 1.4
+scale_max = 2.8
+scale_curve = SubResource("CT_trail_scale")
+color_ramp = SubResource("GT_trail")
+
+[node name="ParticleFX" type="Node2D"]
+script = ExtResource("1_fx")
+
+[node name="Burst" type="GPUParticles2D" parent="."]
+emitting = false
+amount = 18
+lifetime = 0.35
+one_shot = true
+explosiveness = 1.0
+process_material = SubResource("PPM_burst")
+
+[node name="RingBreak" type="GPUParticles2D" parent="."]
+emitting = false
+amount = 18
+lifetime = 0.45
+one_shot = true
+explosiveness = 1.0
+process_material = SubResource("PPM_ring")
+
+[node name="Trail" type="GPUParticles2D" parent="."]
+emitting = true
+amount = 90
+lifetime = 0.45
+local_coords = false
+trail_enabled = true
+trail_lifetime = 0.35
+trail_sections = 10
+trail_section_subdivisions = 4
+process_material = SubResource("PPM_trail")

@@ -1,0 +1,132 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://scripts/celebration_fx.gd" id="1_celeb"]
+[ext_resource type="Texture2D" path="res://assets/fx/confetti_star.png" id="2_star"]
+[ext_resource type="Texture2D" path="res://assets/fx/confetti_square.png" id="3_square"]
+
+[sub_resource type="Gradient" id="G_a"]
+offsets = PackedFloat32Array(0, 0.7, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GT_a"]
+gradient = SubResource("G_a")
+
+[sub_resource type="Curve" id="C_a"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CT_a"]
+curve = SubResource("C_a")
+
+[sub_resource type="ParticleProcessMaterial" id="PPM_a"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 8.0
+direction = Vector3(0, -1, 0)
+spread = 180.0
+initial_velocity_min = 180.0
+initial_velocity_max = 460.0
+damping_min = 40.0
+damping_max = 90.0
+gravity = Vector3(0, 520, 0)
+angle_min = -180.0
+angle_max = 180.0
+angular_velocity_min = -420.0
+angular_velocity_max = 420.0
+scale_min = 0.16
+scale_max = 0.34
+hue_variation_min = -0.5
+hue_variation_max = 0.5
+color_ramp = SubResource("GT_a")
+scale_curve = SubResource("CT_a")
+
+[sub_resource type="ParticleProcessMaterial" id="PPM_b"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 8.0
+direction = Vector3(0, -1, 0)
+spread = 180.0
+initial_velocity_min = 120.0
+initial_velocity_max = 380.0
+damping_min = 30.0
+damping_max = 80.0
+gravity = Vector3(0, 620, 0)
+angle_min = -180.0
+angle_max = 180.0
+angular_velocity_min = -520.0
+angular_velocity_max = 520.0
+scale_min = 0.18
+scale_max = 0.4
+hue_variation_min = -0.5
+hue_variation_max = 0.5
+color_ramp = SubResource("GT_a")
+scale_curve = SubResource("CT_a")
+
+[sub_resource type="ParticleProcessMaterial" id="PPM_ring"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 4.0
+direction = Vector3(0, -1, 0)
+spread = 180.0
+initial_velocity_min = 320.0
+initial_velocity_max = 620.0
+damping_min = 160.0
+damping_max = 260.0
+gravity = Vector3(0, 0, 0)
+scale_min = 0.12
+scale_max = 0.3
+color = Color(1, 0.85, 0.2, 1)
+color_ramp = SubResource("GT_a")
+scale_curve = SubResource("CT_a")
+
+[node name="CelebrationFX" type="Node2D"]
+script = ExtResource("1_celeb")
+
+[node name="ConfettiStar" type="GPUParticles2D" parent="."]
+texture = ExtResource("2_star")
+emitting = false
+amount = 90
+lifetime = 1.5
+one_shot = true
+explosiveness = 1.0
+local_coords = false
+process_material = SubResource("PPM_a")
+
+[node name="ConfettiSquare" type="GPUParticles2D" parent="."]
+texture = ExtResource("3_square")
+emitting = false
+amount = 70
+lifetime = 1.6
+one_shot = true
+explosiveness = 1.0
+local_coords = false
+process_material = SubResource("PPM_b")
+
+[node name="RingBurst" type="GPUParticles2D" parent="."]
+emitting = false
+amount = 48
+lifetime = 0.7
+one_shot = true
+explosiveness = 1.0
+local_coords = false
+process_material = SubResource("PPM_ring")
+
+[node name="Anim" type="AnimationPlayer" parent="."]
+
+[node name="Ui" type="CanvasLayer" parent="."]
+
+[node name="WinLabel" type="Label" parent="Ui"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -140.0
+offset_right = 320.0
+offset_bottom = -30.0
+theme_override_font_sizes/font_size = 72
+text = "ESCAPED!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
