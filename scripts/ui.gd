@@ -12,6 +12,9 @@ extends CanvasLayer
 ##
 ## 节点之间的沟通全部走信号：本节点只负责「把玩家的选择变成配置值并发出去」，
 ## 不直接去改游戏状态（那是 main 的职责）。
+##
+## 所有可调参数（配色、字号、滑块范围、默认配置）集中在 `scripts/config.gd`；
+## 本文件里的数字只剩**布局尺寸**（控件间距、最小宽高）——那些就地读更清楚。
 
 ## 玩家点了「应用并重开」。
 signal apply_and_restart(cfg: Dictionary)
@@ -19,48 +22,28 @@ signal apply_and_restart(cfg: Dictionary)
 signal exit_to_menu
 ## 玩家点了「开始游戏」。
 signal start_game
+## 玩家点了任意按钮 —— main 接到后播音效。
+## 用信号而不是让 UI 自己持有播放器：音频归 `AudioFX` 管，UI 只管发事件
+## （与 `ball.bounced` / `ring.escaped` 同一套做法）。
+signal ui_click
 
-const PALETTES := {
-	"Neon": [Color8(0, 255, 255), Color8(0, 150, 255), Color8(150, 50, 255), Color8(255, 0, 255), Color8(0, 255, 100)],
-	"Fire": [Color8(255, 50, 0), Color8(255, 120, 0), Color8(255, 200, 50), Color8(200, 0, 0)],
-	"Cyber": [Color8(255, 0, 150), Color8(100, 0, 255), Color8(0, 255, 200), Color8(50, 0, 150)],
-	"Ocean": [Color8(0, 50, 200), Color8(0, 150, 255), Color8(100, 200, 255), Color8(0, 255, 180)],
-	"Forest": [Color8(50, 255, 50), Color8(0, 150, 50), Color8(150, 255, 100)],
-	"Pastel": [Color8(255, 180, 180), Color8(180, 255, 180), Color8(180, 180, 255)],
-}
-
-const BASE_COLORS := {
-	"Cyan": Color8(0, 255, 255), "Red": Color8(255, 50, 50), "Green": Color8(50, 255, 50),
-	"Gold": Color8(255, 215, 0), "Pink": Color8(255, 100, 255), "White": Color8(255, 255, 255),
-	"Orange": Color8(255, 140, 0), "Purple": Color8(150, 0, 255), "Lime": Color8(180, 255, 0),
-	"Blue": Color8(0, 100, 255), "Mint": Color8(170, 255, 195), "Crimson": Color8(220, 20, 60),
-}
-
-const MODES := ["Random", "Palette", "Custom"]
-## 侧栏宽度（屏幕像素），与 pygame 原版一致。
-const SIDEBAR_W := 300
-## 数值参数的范围与步进。改这里即可，滑块与标签会自动跟上。
-const SLIDERS := {
-	"rings_count": {"label": "Rings", "min": 1.0, "max": 15.0, "step": 1.0, "fmt": "%d", "suffix": ""},
-	"gravity": {"label": "Gravity", "min": 0.05, "max": 0.8, "step": 0.05, "fmt": "%.2f", "suffix": ""},
-	"gap_size": {"label": "Gap Size", "min": 20.0, "max": 150.0, "step": 5.0, "fmt": "%d", "suffix": "°"},
-}
-
-var cfg := {
-	"rings_count": 8, "rotation_speed": 1.8, "gap_size": 55, "gravity": 0.2,
-	"ring_mode": "Random", "ring_val": "Neon", "ball_mode": "Random", "ball_val": "Gold",
-}
+## 当前配置。默认值来自 `Config.DEFAULT_CFG`（与 main 共用同一份，不再各写一份）。
+var cfg := Config.DEFAULT_CFG.duplicate()
 
 var _menu: Control
 var _sidebar: Control
 var _hud: Control
 var _wins_label: Label
+## 成片版式：顶部游戏名。竖屏留白处，**属于视频画面的一部分**。
+var _title_label: Label
+## 右上角的「UI (H)」按钮 —— 制作工具，不进成片。
+var _toggle: Button
 var _value_labels := {}
 var _sliders := {}
 var _mode_buttons := {}
 var _swatch_grids := {}
 var _swatch_rows := {}
-var _accent := Color8(0, 255, 180)
+var _accent := Config.UI_ACCENT
 
 
 func _ready() -> void:
@@ -86,15 +69,17 @@ func _build_menu() -> void:
 
 	var title := Label.new()
 	title.text = "BALL ESCAPE: KINETIC"
-	title.add_theme_font_size_override("font_size", 40)
+	title.add_theme_font_size_override("font_size", Config.FONT_TITLE)
 	title.add_theme_color_override("font_color", _accent)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
-	var start := _make_button("START GAME", Color8(0, 150, 100))
+	var start := _make_button("START GAME", Config.UI_BUTTON_START)
 	start.custom_minimum_size = Vector2(240, 60)
-	start.add_theme_font_size_override("font_size", 18)
-	start.pressed.connect(func() -> void: start_game.emit())
+	start.add_theme_font_size_override("font_size", Config.FONT_BUTTON_LARGE)
+	start.pressed.connect(func() -> void:
+		ui_click.emit()
+		start_game.emit())
 	box.add_child(start)
 
 
@@ -106,10 +91,10 @@ func _build_sidebar() -> void:
 	_sidebar.anchor_right = 1.0
 	_sidebar.anchor_top = 0.0
 	_sidebar.anchor_bottom = 1.0
-	_sidebar.offset_left = -float(SIDEBAR_W)
+	_sidebar.offset_left = -Config.SIDEBAR_WIDTH
 	_sidebar.offset_right = 0.0
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color8(20, 20, 25)
+	sb.bg_color = Config.UI_PANEL_BG
 	_sidebar.add_theme_stylebox_override("panel", sb)
 	add_child(_sidebar)
 
@@ -124,11 +109,11 @@ func _build_sidebar() -> void:
 
 	var head := Label.new()
 	head.text = "PHYSICS & GAP"
-	head.add_theme_font_size_override("font_size", 18)
+	head.add_theme_font_size_override("font_size", Config.FONT_HEADING)
 	head.add_theme_color_override("font_color", _accent)
 	root.add_child(head)
 
-	for key in SLIDERS.keys():
+	for key in Config.SLIDERS.keys():
 		_add_slider(root, key)
 
 	_add_color_section(root, "ring")
@@ -138,45 +123,85 @@ func _build_sidebar() -> void:
 	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(filler)
 
-	var apply_next := _make_button("APPLY (NEXT ROUND)", Color8(60, 60, 100))
+	var apply_next := _make_button("APPLY (NEXT ROUND)", Config.UI_BUTTON_APPLY_NEXT)
 	apply_next.tooltip_text = "与原作一致：本按钮不生效"
 	apply_next.pressed.connect(func() -> void: pass)
 	root.add_child(apply_next)
 
-	var restart := _make_button("APPLY & RESTART", Color8(0, 120, 80))
-	restart.pressed.connect(func() -> void: apply_and_restart.emit(cfg.duplicate()))
+	var restart := _make_button("APPLY & RESTART", Config.UI_BUTTON_RESTART)
+	restart.pressed.connect(func() -> void:
+		ui_click.emit()
+		apply_and_restart.emit(cfg.duplicate()))
 	root.add_child(restart)
 
-	var ex := _make_button("EXIT", Color8(100, 50, 50))
-	ex.pressed.connect(func() -> void: exit_to_menu.emit())
+	var ex := _make_button("EXIT", Config.UI_BUTTON_EXIT)
+	ex.pressed.connect(func() -> void:
+		ui_click.emit()
+		exit_to_menu.emit())
 	root.add_child(ex)
 
 	_build_hud()
 
 
-## 独立于侧栏的 HUD：胜负计数与 UI 开关。侧栏收起时它必须还在，
-## 否则玩家没法再把面板打开（`CanvasLayer` 不继承父节点 visible，
-## 所以这里用独立分支而不是挂在侧栏里）。
+## 竖屏版式：盘面是圆的，撑满宽度后上下各空出约 1/4 高度 —— 那里就是放字的地方。
+## 顶部放**游戏名 + HUD**，底部留给结算文字（见 `celebration_fx.gd::_layout_win_label()`）。
+##
+## 竖直位置用**占视口高度的比例**（`Config.LAYOUT_*_Y`）而不是像素，
+## 所以换成 1440×2560 等更高分辨率依然成立。
+##
+## ⚠️ 这些是**成片的一部分**，不像侧栏那样默认藏起来 —— 别把它们塞进
+##    `set_chrome_visible()` 里。侧栏收起时它们也必须还在（`CanvasLayer`
+##    不继承父节点 visible，所以这里是独立分支而不是挂在侧栏内）。
 func _build_hud() -> void:
+	_title_label = Label.new()
+	_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_title_label.anchor_top = Config.LAYOUT_TITLE_Y
+	_title_label.anchor_bottom = Config.LAYOUT_TITLE_Y
+	_title_label.offset_bottom = float(Config.FONT_TITLE) * 1.3
+	_title_label.text = "BALL ESCAPE"
+	_title_label.add_theme_font_size_override("font_size", Config.FONT_TITLE)
+	_title_label.add_theme_color_override("font_color", _accent)
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	add_child(_title_label)
+
 	_hud = VBoxContainer.new()
-	_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_hud.position = Vector2(12, 10)
-	_hud.add_theme_constant_override("separation", 4)
+	_hud.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_hud.anchor_top = Config.LAYOUT_HUD_Y
+	_hud.anchor_bottom = Config.LAYOUT_HUD_Y
+	_hud.offset_bottom = float(Config.FONT_HUD) * 1.6
 	add_child(_hud)
 
 	_wins_label = Label.new()
-	_wins_label.add_theme_font_size_override("font_size", 16)
+	_wins_label.add_theme_font_size_override("font_size", Config.FONT_HUD)
+	_wins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hud.add_child(_wins_label)
 
-	var toggle := _make_button("UI (H)", Color8(60, 60, 75))
-	toggle.custom_minimum_size = Vector2(70, 24)
-	toggle.pressed.connect(toggle_ui)
-	_hud.add_child(toggle)
+	# 工具按钮浮在右上角，用 H 键或它来收放侧栏；录制时会被隐藏。
+	_toggle = _make_button("UI (H)", Config.UI_BUTTON_TOGGLE)
+	_toggle.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_toggle.custom_minimum_size = Vector2(120, 52)
+	_toggle.offset_left = -132.0
+	_toggle.offset_right = -12.0
+	_toggle.offset_top = 12.0
+	_toggle.offset_bottom = 64.0
+	_toggle.pressed.connect(toggle_ui)
+	add_child(_toggle)
 
 
-## 一行「标签 + 官方 HSlider + 当前值」
+## `H` 键收放配置侧栏。按钮上写着 "UI (H)"，之前却**没有任何键盘处理** ——
+## 侧栏一藏就只能靠那个按钮，按钮再被隐藏就彻底打不开了。
+func _unhandled_input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k != null and k.pressed and not k.echo and k.keycode == KEY_H:
+		toggle_ui()
+		get_viewport().set_input_as_handled()
+
+
+## 一行「标签 + 官方 HSlider + 当前值」。
+## 范围/步进/标签/格式全部来自 `Config.SLIDERS`，改那里即可。
 func _add_slider(parent: Node, key: String) -> void:
-	var spec: Dictionary = SLIDERS[key]
+	var spec: Dictionary = Config.SLIDERS[key]
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
@@ -184,7 +209,7 @@ func _add_slider(parent: Node, key: String) -> void:
 
 	var name_label := Label.new()
 	name_label.text = String(spec["label"])
-	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_font_size_override("font_size", Config.FONT_LABEL)
 	name_label.custom_minimum_size = Vector2(64, 0)
 	row.add_child(name_label)
 
@@ -201,7 +226,7 @@ func _add_slider(parent: Node, key: String) -> void:
 	_sliders[key] = slider
 
 	var value_label := Label.new()
-	value_label.add_theme_font_size_override("font_size", 12)
+	value_label.add_theme_font_size_override("font_size", Config.FONT_LABEL)
 	value_label.custom_minimum_size = Vector2(34, 0)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value_label)
@@ -209,6 +234,8 @@ func _add_slider(parent: Node, key: String) -> void:
 
 
 func _on_slider_changed(v: float, key: String) -> void:
+	# ⚠️ 拖滑块时 value_changed 会每帧连发，**不能**在这里 emit ui_click ——
+	#    那会变成一秒钟几十下点击音糊成噪音。只播按钮类的离散点击。
 	# rings_count 是整数参数（Slider 的 value 是 float）
 	if key == "rings_count":
 		cfg[key] = int(round(v))
@@ -223,18 +250,18 @@ func _add_color_section(parent: Node, prefix: String) -> void:
 
 	var head := Label.new()
 	head.text = "%s COLOR" % prefix.to_upper()
-	head.add_theme_font_size_override("font_size", 12)
-	head.add_theme_color_override("font_color", Color8(150, 150, 150))
+	head.add_theme_font_size_override("font_size", Config.FONT_LABEL)
+	head.add_theme_color_override("font_color", Config.UI_MUTED_TEXT)
 	parent.add_child(head)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	parent.add_child(row)
 	_mode_buttons[prefix] = {}
-	for m in MODES:
+	for m in Config.COLOR_MODES:
 		var b := _make_button(m)
 		b.custom_minimum_size = Vector2(84, 22)
-		b.add_theme_font_size_override("font_size", 11)
+		b.add_theme_font_size_override("font_size", Config.FONT_SMALL)
 		b.pressed.connect(_on_mode_pressed.bind(prefix, m))
 		row.add_child(b)
 		_mode_buttons[prefix][m] = b
@@ -248,41 +275,43 @@ func _add_color_section(parent: Node, prefix: String) -> void:
 	_swatch_rows[prefix] = {}
 
 	var items: Array = []
-	for n in PALETTES.keys():
+	for n in Config.PALETTES.keys():
 		items.append(n)
-	for n in BASE_COLORS.keys():
+	for n in Config.BASE_COLORS.keys():
 		items.append(n)
 	for n in items:
 		var b := _make_button(String(n))
 		b.custom_minimum_size = Vector2(62, 22)
-		b.add_theme_font_size_override("font_size", 10)
+		b.add_theme_font_size_override("font_size", Config.FONT_TINY)
 		b.pressed.connect(_on_swatch_pressed.bind(prefix, String(n)))
 		grid.add_child(b)
 		_swatch_rows[prefix][String(n)] = b
 
 
 func _on_mode_pressed(prefix: String, mode: String) -> void:
+	ui_click.emit()
 	cfg["%s_mode" % prefix] = mode
 	_refresh()
 
 
 func _on_swatch_pressed(prefix: String, name: String) -> void:
+	ui_click.emit()
 	cfg["%s_val" % prefix] = name
 	_refresh()
 
 
-func _make_button(text: String, bg: Color = Color8(60, 60, 75)) -> Button:
+func _make_button(text: String, bg: Color = Config.UI_BUTTON_BORDER) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_size_override("font_size", 12)
+	b.add_theme_font_size_override("font_size", Config.FONT_BUTTON)
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color8(30, 30, 40)
+	normal.bg_color = Config.UI_BUTTON_BG
 	normal.border_color = bg
 	normal.set_border_width_all(1)
 	normal.set_corner_radius_all(4)
 	b.add_theme_stylebox_override("normal", normal)
 	var hover := normal.duplicate() as StyleBoxFlat
-	hover.border_color = Color8(120, 120, 140)
+	hover.border_color = Config.UI_BUTTON_BORDER_HOVER
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", hover)
 	return b
@@ -294,7 +323,7 @@ func _make_button(text: String, bg: Color = Color8(60, 60, 75)) -> Button:
 ## 用 `set_value_no_signal` 写滑块，避免与 `value_changed` 形成回环。
 func _refresh() -> void:
 	for key in _value_labels.keys():
-		var spec: Dictionary = SLIDERS[key]
+		var spec: Dictionary = Config.SLIDERS[key]
 		var v: float = float(cfg[key])
 		_value_labels[key].text = (String(spec["fmt"]) % (int(round(v)) if String(spec["fmt"]) == "%d" else v)) + String(spec["suffix"])
 		var slider: HSlider = _sliders[key]
@@ -309,21 +338,25 @@ func _refresh() -> void:
 		var chosen: String = cfg["%s_val" % prefix]
 		for n in _swatch_rows[prefix].keys():
 			var b: Button = _swatch_rows[prefix][n]
-			b.visible = PALETTES.has(n) == want_palette
+			b.visible = Config.PALETTES.has(n) == want_palette
 			_mark(b, n == chosen)
 
 
 func _mark(b: Button, active: bool) -> void:
 	var sb := b.get_theme_stylebox("normal") as StyleBoxFlat
 	if sb != null:
-		sb.border_color = _accent if active else Color8(60, 60, 75)
+		sb.border_color = _accent if active else Config.UI_BUTTON_BORDER
 		sb.set_border_width_all(2 if active else 1)
 
 
 func set_menu_visible(menu_on: bool) -> void:
 	_menu.visible = menu_on
-	_sidebar.visible = not menu_on
+	# 进游戏后侧栏**默认收起**：竖屏下盘面撑满宽度，300px 的侧栏会盖住环。
+	# 需要调参时按 H 或点右上角按钮（那时相机会自动把盘面缩小让位）。
+	_sidebar.visible = false
+	_title_label.visible = not menu_on
 	_hud.visible = not menu_on
+	_toggle.visible = not menu_on
 
 
 func set_wins(n: int) -> void:
@@ -333,6 +366,15 @@ func set_wins(n: int) -> void:
 
 func toggle_ui() -> void:
 	_sidebar.visible = not _sidebar.visible
+
+
+## 隐藏/显示**制作工具**（配置侧栏 + 右上角按钮）—— 成片里不该出现它们。
+##
+## ⚠️ 顶部标题与 HUD **不**在这里：竖屏上下留白就是用来放它们的，
+##    它们是成片版式的一部分（见 `_build_hud()`）。
+func set_chrome_visible(on: bool) -> void:
+	_sidebar.visible = on
+	_toggle.visible = on
 
 
 func sidebar_visible() -> bool:

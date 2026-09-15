@@ -1,0 +1,4 @@
+# 离线渲染产物（Movie Maker mode）—— 体积大，不进版本库。
+# 重新生成：godot --path godot-ballgame --write-movie captures/round.avi
+captures/
+/.godot

@@ -8,9 +8,20 @@ extends Node2D
 ##
 ## 三个节点都是 GPU 粒子（`GPUParticles2D` + `ParticleProcessMaterial`），
 ## 发射/生命周期/阻尼/重力/缩放曲线/颜色渐变全部交给引擎，本脚本只负责：
-##   1. 把 res://particles.cfg 的参数套到节点上；
+##   1. 把参数套到节点上；
 ##   2. 在正确的世界位置触发一次性爆发；
 ##   3. 每帧把拖尾发射器挪到球的位置。
+##
+## ## 参数来源与优先级（高 → 低）
+##
+## ```
+## Config.PARTICLES_OVERRIDE_PATH（particles.cfg，可选，只认显式写出的键）
+##   > Config.PARTICLES（scripts/config.gd，唯一的默认值来源）
+##     > particle_fx.tscn 里保存的值
+## ```
+##
+## 颜色渐变、缩放曲线等**观感项**刻意留在 `.tscn` 里，方便在编辑器中可视化调参；
+## 数值参数一律放在 `Config.PARTICLES`，所以出厂状态下改一个文件就够了。
 ##
 ## ⚠️ 渲染器必须是 forward_plus。Compatibility 渲染器不支持官方粒子拖尾
 ##    （运行时会打印 "The Compatibility renderer does not support particle trails."），
@@ -22,7 +33,8 @@ extends Node2D
 ## ⚠️ 早期版本曾用一个 `position/scale` 对齐 `world_to_screen()` 的容器节点，
 ##    接入 `Camera2D` 后那种做法会**二次偏移**，已废弃。
 
-const CFG_PATH := "res://particles.cfg"
+## 三个发射器各自的配置节名，顺序即初始化顺序。
+const SECTIONS := ["burst", "ring_break", "trail"]
 
 
 class Ref:
@@ -47,13 +59,19 @@ func _ready() -> void:
 	burst = Ref.new($Burst)
 	ring_break = Ref.new($RingBreak)
 	trail = Ref.new($Trail)
-	_cfg_loaded = _cfg.load(CFG_PATH) == OK
-	if not _cfg_loaded:
-		push_warning("particles.cfg 未加载，沿用 particle_fx.tscn 里保存的参数。")
-		return
-	for s in ["burst", "ring_break", "trail"]:
-		if _cfg.has_section(s):
-			_apply(_ref_for(s), s)
+	# 固定 GPU 粒子的随机种子，让成片逐帧可复现（见 Config.PARTICLE_FIXED_SEED）。
+	# 三个发射器给不同的种子，免得火花图案完全一样。
+	var i := 0
+	for r in [burst, ring_break, trail]:
+		r.node.use_fixed_seed = true
+		r.node.seed = Config.PARTICLE_FIXED_SEED + i
+		i += 1
+	# 覆盖文件是**可选**的；没有它照样用 Config.PARTICLES。
+	_cfg_loaded = _cfg.load(Config.PARTICLES_OVERRIDE_PATH) == OK
+	# ⚠️ 三个发射器一律套用配置，**不能**因为覆盖文件缺某个 section 就跳过 ——
+	#    跳过了 `one_shot` 就没人把一次性发射器静音，它们会在场景原点自行发射。
+	for s in SECTIONS:
+		_apply(_ref_for(s), s)
 
 
 func _ref_for(section: String) -> Ref:
@@ -63,10 +81,38 @@ func _ref_for(section: String) -> Ref:
 		_: return trail
 
 
-# ------------------------------------------------------------------ 配置套用
+# ------------------------------------------------------------------ 配置取值
 
-## 只覆盖配置文件里**显式写出**的键；没写的沿用场景里保存的值，
-## 所以在编辑器里调好的观感不会被配置文件里的遗漏项清掉。
+## 某个键是否被显式配置过（Config 或覆盖文件里写了）——用于区分
+## 「配置里没提，沿用场景值」和「配置里写了一个值」。
+func _has(s: String, key: String) -> bool:
+	var defaults: Dictionary = Config.PARTICLES.get(s, {})
+	if defaults.has(key):
+		return true
+	return _cfg_loaded and _cfg.has_section_key(s, key)
+
+
+## 按优先级取一个值：particles.cfg > Config.PARTICLES > `fallback`（场景里的值）。
+func _val(s: String, key: String, fallback: Variant) -> Variant:
+	var v: Variant = fallback
+	var defaults: Dictionary = Config.PARTICLES.get(s, {})
+	if defaults.has(key):
+		v = defaults[key]
+	if _cfg_loaded and _cfg.has_section_key(s, key):
+		v = _cfg.get_value(s, key)
+	# 用 fallback 的静态类型决定转换方向，避免把 float 塞进 int 属性。
+	match typeof(fallback):
+		TYPE_INT:
+			return int(v)
+		TYPE_FLOAT:
+			return float(v)
+		TYPE_BOOL:
+			return bool(v)
+	return v
+
+
+## 只覆盖显式配置过的键；没写的沿用场景里保存的值，
+## 所以在编辑器里调好的观感不会被配置里的遗漏项清掉。
 func _apply(r: Ref, s: String) -> void:
 	var one_shot: bool = _val(s, "one_shot", r.node.one_shot)
 	r.node.one_shot = one_shot
@@ -81,28 +127,13 @@ func _apply(r: Ref, s: String) -> void:
 	r.mat.gravity = Vector3(0.0, _val(s, "gravity", r.mat.gravity.y), 0.0)
 	r.mat.scale_min = _val(s, "scale_min", r.mat.scale_min)
 	r.mat.scale_max = _val(s, "scale_max", r.mat.scale_max)
-	if _cfg.has_section_key(s, "emission_radius"):
+	if _has(s, "emission_radius"):
 		r.mat.emission_sphere_radius = _val(s, "emission_radius", r.mat.emission_sphere_radius)
 	# 一次性发射器初始化时保持静默，等 impact()/ring_break_at() 触发
 	if one_shot:
 		r.node.emitting = false
 	else:
 		r.node.emitting = _val(s, "enabled", r.node.emitting)
-
-
-func _val(s: String, key: String, fallback: Variant) -> Variant:
-	if not _cfg.has_section_key(s, key):
-		return fallback
-	var v: Variant = _cfg.get_value(s, key)
-	# 用 fallback 的静态类型决定转换方向，避免把 float 塞进 int 属性。
-	match typeof(fallback):
-		TYPE_INT:
-			return int(v)
-		TYPE_FLOAT:
-			return float(v)
-		TYPE_BOOL:
-			return bool(v)
-	return v
 
 
 # ------------------------------------------------------------------ 游戏调用
@@ -128,7 +159,9 @@ func _fire(r: Ref, world_pos: Vector2, dir_world: Vector2, color: Color) -> void
 	r.mat.color = color
 	# 官方文档：one_shot 发射器在 GPU 上计算，用 restart() 而不是 emitting=true，
 	# 否则收到信号后可能有一小段时间不重新开始发射周期。
-	r.node.restart()
+	# ⚠️ 必须 `restart(true)` 保留种子 —— 默认的 `restart()` 会**重新抽**
+	#    随机种子，那样每次撞击的火花图案都不同，成片就没法逐帧复现。
+	r.node.restart(true)
 
 
 ## 把小球的运动轨迹交给官方拖尾发射器。
@@ -142,7 +175,7 @@ func emit_trail(ball_world: Vector2, radius_world: float, color: Color) -> void:
 	# 官方没有发射频率参数，用抽帧开关 emitting 来降采样发射密度。
 	if interval > 1:
 		trail.node.emitting = (_trail_frame % interval) == 0
-	if _cfg.has_section_key("trail", "emission_radius_scale"):
+	if _has("trail", "emission_radius_scale"):
 		var k := float(_val("trail", "emission_radius_scale", 0.5))
 		trail.mat.emission_sphere_radius = maxf(0.5, radius_world * k)
 
@@ -157,4 +190,5 @@ func restart_trail() -> void:
 		return
 	_trail_frame = 0
 	trail.node.emitting = true
-	trail.node.restart()
+	# 同上：保留种子，拖尾图案每次都一样。
+	trail.node.restart(true)

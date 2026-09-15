@@ -1,0 +1,7 @@
+[gd_resource type="AudioBusLayout" format=3]
+
+[sub_resource type="AudioEffectHardLimiter" id="AudioEffectHardLimiter_j3pel"]
+
+[resource]
+bus/0/effect/0/effect = SubResource("AudioEffectHardLimiter_j3pel")
+bus/0/effect/0/enabled = true
