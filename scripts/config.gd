@@ -137,7 +137,7 @@ const BALL_WORLD_RADIUS := 12.0
 ## 显示用圆的细分段数。
 const BALL_CIRCLE_STEPS := 32
 ## 碰撞后保留的速度比例（pygame 原版为 0.98）。
-const BALL_RESTITUTION := 0.98
+const BALL_RESTITUTION := 1
 ## 「速度过小就加速」的阈值（世界单位 / 物理帧）。
 ##
 ## ⚠️ 必须与内部速度同尺度。原版直接拿**像素/帧**速度比较 1.0；本实现内部速度是
@@ -159,10 +159,10 @@ const BALL_GRAVITY := 0.02
 # ============================================================================
 
 const DEFAULT_CFG := {
-	"rings_count": 8,
+	"rings_count": 12,
 	"rotation_speed": 1.8,
-	"gap_size": 55,
-	"gravity": 0.2,
+	"gap_size": 45,
+	"gravity": 1.0,
 	"ring_mode": "Random",
 	"ring_val": "Neon",
 	"ball_mode": "Random",
@@ -228,7 +228,12 @@ const FONT_TINY := 16           ## 色板按钮
 
 const SLIDERS := {
 	"rings_count": {"label": "Rings", "min": 1.0, "max": 15.0, "step": 1.0, "fmt": "%d", "suffix": ""},
-	"gravity": {"label": "Gravity", "min": 0.05, "max": 0.8, "step": 0.05, "fmt": "%.2f", "suffix": ""},
+	# 上限必须 ≥ `DEFAULT_CFG.gravity`，否则默认值落在滑块范围外、拉不回来
+	# （之前 max=0.8 而默认值已改成 1.0，正是这种情况）。
+	# ⚠️ step 就是「每物理帧的重力增量」的调参粒度：0.05 → 每帧 +0.05 世界单位，
+	#    而 `BALL_MIN_SPEED` 是 1.0，最小档也已有阈值 1/20 的量级 ——
+	#    再往下调就拉不出明显差别了，别把 step 降到 0.01。
+	"gravity": {"label": "Gravity", "min": 0.05, "max": 2.0, "step": 0.05, "fmt": "%.2f", "suffix": ""},
 	"gap_size": {"label": "Gap Size", "min": 20.0, "max": 150.0, "step": 5.0, "fmt": "%d", "suffix": "°"},
 }
 
@@ -383,12 +388,36 @@ const CELEBRATION_FONT_SIZE := 110
 # `impactGlass_*` / `impactTin_*` / `impactMining_*`，同样各带三档），
 # 再改下面的路径即可，脚本不用动。
 #
-# ## 格式：这里用的是 `.ogg`
+# ## 格式：`.wav`（44100 Hz / 单声道 / PCM 无损）
 #
-# Godot 官方 Best practices 建议短促反复的音效用 WAV、长音频用 OGG。
-# 本工程用 **Kenney 自带的 `.ogg`**，没有转成 WAV —— 转码需要额外解码器，
-# 而这类几 KB 的一次性音效两者听感差别很小。
-# 若日后要做精细的 loop 点编辑（只有 WAV 支持 loop end），再转不迟。
+# Godot 官方 Best practices 的原话是
+# 「Consider using **WAV for short and repetitive sound effects**, and Ogg Vorbis
+#  for music, speech, and long sound effects」（`importing_audio_samples`）。
+#
+# 这 26 条素材**全部**落在「短促反复」那一侧（实测 0.24~1.36 s，全程 44100 Hz），
+# 所以从 Kenney 原包的 `.ogg` 转成了 WAV。转换只有一步（ffmpeg 直接解码，
+# 不碰音量、不重采样）：
+#
+#     ffmpeg -i in.ogg -ac 1 -ar 44100 -c:a pcm_s16le out.wav
+#
+# 三个选择及其依据（详见 `assets/sounds/CREDITS.md`）：
+#
+#   * **单声道**：官方 Best practices 说「Many sound effects can generally be
+#     converted to mono as opposed to stereo」。原素材除 `celebration` 外都是
+#     立体声，转单声道**体积直接减半**。本项目也没有任何声像信息（音效由
+#     `AudioStreamPolyphonic` 直接送 Master，不做 2D/3D 声像）。
+#   * **44100 Hz 不动**：官方说「除非运行时降速播放，否则高于 48 kHz 没有可听收益」。
+#     原素材本来就是 44100，无需重采样。
+#   * **PCM 无损**：`.wav.import` 的 `compress/mode = 0`。
+#     默认值是 `2`（Quite OK Audio，有损），必须显式改，否则「转了 WAV 却仍是有损」。
+#     官方原话：PCM「preserving the highest possible quality. It has the **lowest CPU
+#     cost**」—— 撞击密集时同帧并发 4 条，解码开销这一项有实际意义。
+#
+# ⚠️ **音量没有动过**：ffmpeg 不归一化。实测转出来峰值 −0.6 ~ −5.7 dBFS，
+#    不削顶；音量分档由本节的 `volume_db_soft/hard` 负责，两处叠加会失控。
+#
+# 代价：340 KB → 1.29 MB（3.8×）。原 `.ogg` 已删，但两个 Kenney 原包 zip
+# 仍留在 `assets/sounds/`，随时可重新导出成别的格式。
 #
 # ## 参数表
 #
@@ -434,21 +463,21 @@ static var AUDIO := {
 	# 由 `BOUNCE_TIERS` 按速度分档，档内等概率抽一条。
 	"bounce": {
 		"streams": PackedStringArray([
-			"res://assets/sounds/ring_hit/impactPlate_light_000.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_light_001.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_light_002.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_light_003.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_light_004.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_medium_000.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_medium_001.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_medium_002.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_medium_003.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_medium_004.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_heavy_000.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_heavy_001.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_heavy_002.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_heavy_003.ogg",
-			"res://assets/sounds/ring_hit/impactPlate_heavy_004.ogg",
+			"res://assets/sounds/ring_hit/impactPlate_light_000.wav",
+			"res://assets/sounds/ring_hit/impactPlate_light_001.wav",
+			"res://assets/sounds/ring_hit/impactPlate_light_002.wav",
+			"res://assets/sounds/ring_hit/impactPlate_light_003.wav",
+			"res://assets/sounds/ring_hit/impactPlate_light_004.wav",
+			"res://assets/sounds/ring_hit/impactPlate_medium_000.wav",
+			"res://assets/sounds/ring_hit/impactPlate_medium_001.wav",
+			"res://assets/sounds/ring_hit/impactPlate_medium_002.wav",
+			"res://assets/sounds/ring_hit/impactPlate_medium_003.wav",
+			"res://assets/sounds/ring_hit/impactPlate_medium_004.wav",
+			"res://assets/sounds/ring_hit/impactPlate_heavy_000.wav",
+			"res://assets/sounds/ring_hit/impactPlate_heavy_001.wav",
+			"res://assets/sounds/ring_hit/impactPlate_heavy_002.wav",
+			"res://assets/sounds/ring_hit/impactPlate_heavy_003.wav",
+			"res://assets/sounds/ring_hit/impactPlate_heavy_004.wav",
 		]),
 		"pitch_jitter": 0.05,
 		"volume_db_soft": -13.0,
@@ -460,11 +489,11 @@ static var AUDIO := {
 	# 事件音：刻意不随速度变化（`sfx_ring_break()` 不传档位，走整个池子）。
 	"ring_break": {
 		"streams": PackedStringArray([
-			"res://assets/sounds/ring_break/impactGlass_medium_000.ogg",
-			"res://assets/sounds/ring_break/impactGlass_medium_001.ogg",
-			"res://assets/sounds/ring_break/impactGlass_medium_002.ogg",
-			"res://assets/sounds/ring_break/impactGlass_medium_003.ogg",
-			"res://assets/sounds/ring_break/impactGlass_medium_004.ogg",
+			"res://assets/sounds/ring_break/impactGlass_medium_000.wav",
+			"res://assets/sounds/ring_break/impactGlass_medium_001.wav",
+			"res://assets/sounds/ring_break/impactGlass_medium_002.wav",
+			"res://assets/sounds/ring_break/impactGlass_medium_003.wav",
+			"res://assets/sounds/ring_break/impactGlass_medium_004.wav",
 		]),
 		"pitch_jitter": 0.05,
 		"volume_db": -2.0,
@@ -473,9 +502,9 @@ static var AUDIO := {
 	# 通关结算。用 `explosionCrunch` 的「轰」——霓虹场景配低频更有收束感。
 	"celebrate": {
 		"streams": PackedStringArray([
-			"res://assets/sounds/celebration/explosionCrunch_000.ogg",
-			"res://assets/sounds/celebration/explosionCrunch_001.ogg",
-			"res://assets/sounds/celebration/explosionCrunch_002.ogg",
+			"res://assets/sounds/celebration/explosionCrunch_000.wav",
+			"res://assets/sounds/celebration/explosionCrunch_001.wav",
+			"res://assets/sounds/celebration/explosionCrunch_002.wav",
 		]),
 		"pitch_jitter": 0.0,
 		"volume_db": -3.0,
@@ -484,9 +513,9 @@ static var AUDIO := {
 	# UI 按钮点击（START / APPLY / EXIT / 配色与取色模式按钮）。
 	"ui_click": {
 		"streams": PackedStringArray([
-			"res://assets/sounds/ui_click/laserSmall_000.ogg",
-			"res://assets/sounds/ui_click/laserSmall_001.ogg",
-			"res://assets/sounds/ui_click/laserSmall_002.ogg",
+			"res://assets/sounds/ui_click/laserSmall_000.wav",
+			"res://assets/sounds/ui_click/laserSmall_001.wav",
+			"res://assets/sounds/ui_click/laserSmall_002.wav",
 		]),
 		"pitch_jitter": 0.08,
 		"volume_db": -8.0,

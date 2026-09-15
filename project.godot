@@ -17,19 +17,15 @@ config/icon="res://icon.svg"
 
 [display]
 
-; 竖屏 9:16（抖音/B站）。视口就是**出片分辨率** —— 配合下面的 stretch/mode="viewport"，
-; Movie Maker 录出来的就是 1080×1920，与桌面窗口多大无关。
 window/size/viewport_width=1080
 window/size/viewport_height=1920
-; 窗口按 0.5 倍显示：1080×1920 放不进 1080p 屏幕，会被驱动裁掉。
-; 这只是**预览窗口**大小，不影响出片分辨率。
 window/size/window_width_override=540
 window/size/window_height_override=960
-; "viewport"：先把场景渲染到 1080×1920 的根视口，再缩放贴到窗口上。
-; ⚠️ 只有 "viewport" 模式下出片分辨率才由**视口**决定；"disabled"/"canvas_items"
-;    下由**窗口**决定，那 1080×1920 就会被屏幕高度限制住、录不出全尺寸。
 window/stretch/mode="viewport"
-window/stretch/aspect="keep"
+
+[editor]
+
+movie_writer/movie_file="D:/lg/else/videos-godot/godot-ballgame/captures/ballgame2.ogv"
 
 [layer_names]
 
@@ -39,9 +35,4 @@ window/stretch/aspect="keep"
 
 [physics]
 
-; 离线渲染（Movie Maker mode）专用覆盖 —— 用的是 Godot 官方的「feature tag 覆盖
-; 项目设置」机制，`movie` 是引擎内置的默认标签，`--write-movie` 启动时自动生效。
-; 值 0.5（默认）会让引擎为了迁就物理时钟微调每帧 delta，实测 30fps 下 delta 在
-; 0.0325~0.033333 之间抖；置 0 后 delta 恒等于 1/帧率，离线渲染才是严格确定的。
-; 只影响录制，实时游玩的手感不变。
 common/physics_jitter_fix.movie=0.0

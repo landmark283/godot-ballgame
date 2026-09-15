@@ -109,6 +109,10 @@ _camera.offset = Vector2(-shift_px / 0.7, 0.0)
 
 实测（真实渲染器，视口 1350×950）：
 
+> ⚠️ 下表是**横屏时期**（视口 1350×950、`zoom` 固定 0.7）的实测记录，
+> 保留作为「换算逻辑正确」的证据。现在视口已是竖屏 1080×1920、
+> `zoom` 由 `PLAYFIELD_FILL` 反推，**绝对数值已不适用**，见「竖屏版式」。
+
 |           | 世界中心(500,500) → 屏幕 | 可见区中心 | 内容包围盒 x                |
 | --------- | ------------------ | ----- | ---------------------- |
 | 菜单（侧栏隐藏）  | (675.0, 475.0)     | 675.0 | [360..990] ⊆ [0..1350] |
@@ -495,9 +499,14 @@ Godot 官方的**非实时**录制：引擎把每帧 `delta` 钉成 `1/帧率`�
 $exe = 'E:\Godot\Godot_v4.6.2-stable_win64\Godot_v4.6.2-stable_win64_console.exe'
 $env:APPDATA = 'D:\lg\else\videos-godot\.godot-userdata'   # 沙箱里必须，否则引擎起不来
 
-# 录一整局（到结算动画播完自动停），默认 60fps
-& $exe --path godot-ballgame --write-movie captures/portrait.avi
+# 录一整局（到结算动画播完自动停）→ captures/round.avi
+& $exe --path godot-ballgame --write-movie captures/round.avi
 ```
+
+**就这一条。** 帧率自动是 60、分辨率自动是 1080×1920、录完自动退出。
+
+> 相对路径是**相对于项目目录**，不是当前工作目录（官方行为，同 `--export-release`）。
+> 所以 `captures/round.avi` → `godot-ballgame/captures/round.avi`。
 
 **不需要** `--quit-after`，也**不需要**动任何滑块 —— 工程已经接好了：
 
@@ -512,6 +521,30 @@ $env:APPDATA = 'D:\lg\else\videos-godot\.godot-userdata'   # 沙箱里必须，�
 
 想录多局改 `Config.MOVIE_ROUNDS`；想换一局改 `Config.MOVIE_SEED`。
 
+### 命令行开关（`--help` 原文摘录）
+
+| 开关 | 作用 |
+| --- | --- |
+| `--write-movie <file>` | 开启录制。**`--fixed-fps` 会被自动强制**，不用自己加 |
+| `--fixed-fps <fps>` | 改录制帧率（默认 60）。录 120/240 再降帧可做动态模糊 |
+| `--quit-after <N>` | 录 N 帧后退出。本项目**不需要**（自己会退）；注意 N 是**引擎总帧数** |
+| `--disable-vsync` | 可能加快写入（硬件够快时） |
+| `--resolution <W>x<H>` | 覆盖**窗口**尺寸。⚠️ 本项目是 `viewport` 拉伸模式，**出片分辨率由视口决定，这个开关改不了出片尺寸** |
+
+> ⚠️ **绝对不要加 `--headless`** —— 见下面「必须用真实渲染器」。
+
+### 不想用命令行：编辑器里点一下
+
+1. 点编辑器右上角的**「胶片卷」图标**开启 Movie Maker 模式（图标会带上强调色底）。
+2. `Project Settings > Editor > Movie Writer > Movie File` 填输出路径。
+3. 正常按 F5 运行项目即可，录完自动停。
+
+两个官方注意点：
+
+- Movie Maker 状态**不持久**，重启编辑器要重新点。
+- 想**单个场景**单独出片（不跑主场景），可以在该场景**根节点**加一个名为
+  `movie_file` 的 **String 元数据**，只在它作为主场景、或按 F6 单独运行时生效。
+
 ### 参数在哪
 
 | 想改什么 | 位置 |
@@ -521,6 +554,14 @@ $env:APPDATA = 'D:\lg\else\videos-godot\.godot-userdata'   # 沙箱里必须，�
 | 输出分辨率 | = 视口尺寸 **1080×1920**（见「竖屏版式」）；改 `project.godot` 即可 |
 | 编码质量 / 关键帧间隔 / 音频 | Project Settings 的 `editor/movie_writer/*` |
 | 录制期间才生效的项目设置覆盖 | `project.godot` 里带 `.movie` 后缀的键 |
+
+`Editor > Movie Writer` 里几个值得知道的项（部分要开右上角 **Advanced** 才可见）：
+
+- **Mix Rate Hz** —— ⚠️ 官方条件：**必须能被录制 FPS 整除**，否则音频会随时间失步。
+  实测本项目录出的音轨是 **48000 Hz / 立体声**。
+- **Video Quality** `0.01~1.0`，官方推荐 `0.75~0.9`（对 `.png` 无效）。
+- **Audio Quality** `-0.1~1.0`，官方推荐 `0.3~0.5`（仅 `.ogv`）。
+- **Encoding Speed / Keyframe Interval**（仅 `.ogv`）。
 
 ### ⚠️ 必须用真实渲染器
 
@@ -560,9 +601,13 @@ common/physics_jitter_fix.movie=0.0
 
 | 格式 | 说明 |
 | --- | --- |
-| `.avi`（MJPEG） | 默认选择。编码快、兼容广，**限制 4GB**。实测 1350×950 约 40KB/帧 → 60fps 下约 28 分钟上限，一局 36 秒完全够 |
+| `.avi`（MJPEG） | 默认选择。编码快、兼容广，**限制 4GB**。实测竖屏 1080×1920 一局 **53 秒 = 3179 帧 = 213 MB ≈ 67 KB/帧**（约 5.6 MB/s），4GB 上限约合 **12 分钟** 连续录制，一局远够 |
 | `.png`（序列帧 + `.wav`） | 无损、支持透明，但要外部 ffmpeg 再编码，体积大 |
 | `.ogv`（Theora） | 压缩率更好，但**只有编辑器版能录**，且浏览器不支持 |
+
+> ⚠️ 本项目**用 `.avi` 而不是官方推荐的 `.ogv`**：`.ogv` 的优势是压缩率，
+> 但浏览器不支持 Theora、发抖音反正都要转码，而 `.avi` 兼容性更广、
+> 且实测确认**自带音轨**（PCM / 48 kHz / 立体声）。
 
 > ⚠️ 实测 AVI 的 RIFF 大小字段比实际文件**少 70 字节**（180 帧和 2161 帧都一样，
 > 是固定偏差，`idx1` 索引块结尾正好落在 EOF，结构完整）。ffmpeg 能把 2161 帧
@@ -581,19 +626,32 @@ $ff = 'E:\JianyingPro\11.4.0.14410\ffmpeg.exe'
 ```
 
 它属于剪映的安装目录，剪映升级后路径会变 —— 要长期用建议自己装一份正规 ffmpeg。
-实测输出：`Duration 00:00:36.02 / 1350x950 / 60 fps / h264 Main + aac`。
+实测输出：竖屏 **`Duration 00:00:53 / 1080x1920 / 60 fps / h264 Main + aac`**，
+213 MB 的 AVI 压到 **158 MB** 且带音轨（`-c:a` 未指定，沿用 AVI 里的 PCM → 转 AAC）。
 
-### 想录比屏幕还高的分辨率
+> `.ogv` / `.avi` 转 MP4 的官方命令更简单，但**要求 PATH 里有 ffmpeg**：
+> `ffmpeg -i input.avi -crf 15 output.mp4`（CRF 15；想小一点就调大 CRF）。
+> 官网还给了 PNG 序列合成（`-r 60 -i input%08d.png -i input.wav`）、
+> 裁剪（`-ss -t`）、降帧（`-r 30`）的写法。
 
-`disabled` / `canvas_items` 拉伸模式下，输出分辨率由**窗口**尺寸决定。要超过屏幕：
+### 想比 1080×1920 更高的分辨率
 
-```powershell
-& $exe --path godot-ballgame --write-movie captures/round.avi --resolution 1920x1080
+本项目用的是 **`viewport` 拉伸模式**，所以**出片分辨率由视口决定，与窗口无关**
+—— 直接把 `project.godot` 里这两个值改大即可（例如 `2160×3840`）：
+
+```ini
+[display]
+window/size/viewport_width=1080
+window/size/viewport_height=1920
 ```
 
-更高就用 `viewport` 拉伸模式（由视口尺寸决定输出），配合
-`Display > Window > Size > Window Width/Height Override` 把实际窗口压小 ——
-两者都能用 `.movie` 特性标签只对录制生效。
+`window_width_override` / `window_height_override` 只影响**预览窗口**多大，
+改它不会改变出片尺寸。想「只在录制时用高分辨率」，可以用官方 feature tag
+在这两个键上加 `.movie` 后缀，实时游玩仍保持 1080×1920。
+
+> ⚠️ 反过来说：因为出片尺寸由视口决定，命令行 `--resolution` 在本项目里
+> **改不了出片分辨率**（它只改窗口）。官方文档也强调 `--resolution` 是给
+> `disabled` / `canvas_items` 拉伸模式用的。
 
 ---
 

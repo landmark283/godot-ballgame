@@ -80,9 +80,9 @@ var _voices_in_window := 0
 ##
 ## `Config.AUDIO` 里列出的文件按**文件名里的强度词**自动分档：
 ##
-##     impactPlate_light_003.ogg   -> "light"
-##     impactPlate_medium_001.ogg  -> "medium"
-##     impactPlate_heavy_004.ogg   -> "heavy"
+##     impactPlate_light_003.wav   -> "light"
+##     impactPlate_medium_001.wav  -> "medium"
+##     impactPlate_heavy_004.wav   -> "heavy"
 ##
 ## 这不是为 Kenney 写死的：那套命名在免费音效库里非常常见，
 ## 而它恰好把「撞击力度」这一维**免费**给了我们 ——
