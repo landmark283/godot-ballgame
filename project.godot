@@ -36,3 +36,14 @@ movie_writer/movie_file="D:/lg/else/videos-godot/godot-ballgame/captures/ballgam
 [physics]
 
 common/physics_jitter_fix.movie=0.0
+
+[rendering]
+
+; 2D 抗锯齿：**必须靠 MSAA**。`Polygon2D` 的 `antialiased` 属性在本引擎版本里是
+; 空操作（实测改它前后渲染出的 PNG 逐字节相同），`Line2D.antialiased` 同样无效；
+; 官方 2D 抗锯齿文档也写明 Polygon2D 这类节点「don't feature an antialiased property」，
+; 要用 2D MSAA 代替。
+; 取值：0=关，1=2x，2=4x，3=8x。实测圆环边缘软度 6.63(0) → 8.76(4x)，8x 无额外收益。
+; ⚠️ 仅工程启动时读取一次；运行时要用 `Viewport.msaa_2d` 改。
+; ⚠️ 仅 Forward+ / Mobile 支持，Compatibility 渲染器无效。
+anti_aliasing/quality/msaa_2d=2
