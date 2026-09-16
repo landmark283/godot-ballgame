@@ -62,8 +62,9 @@ scripts/config.gd   ★ 所有可调参数集中在这里（class_name Config）
 **刻意不放在 `config.gd` 的参数**（避免同一个值有两处定义）：
 
 - **视口尺寸与拉伸模式** → `project.godot`（Godot 官方位置，引擎直接读）。
-  改分辨率就来这里，见「竖屏版式」一节。录制期间才生效的覆盖也在这里，
-  写成带 `.movie` 后缀的键（官方 feature tag 机制）。
+  那里有**三个不同的「分辨率」**（逻辑尺寸 / 预览窗口 / 出片尺寸），见「竖屏版式」。
+  录制期间才生效的覆盖写成带 `.movie` 后缀的键（官方 feature tag 机制）；
+  **出片档位**（1080 / 4K）用 `override.cfg` 切，见「两档出片分辨率」。
 - 颜色渐变、缩放曲线等观感 → 各自的 `.tscn`（要在编辑器里可视化预览）。
 - 控件间距、最小宽高 → `ui.gd` 的构建函数（就地读更清楚）。
 
@@ -415,47 +416,78 @@ Video 格式的选择：
 这个项目**不是拿来玩的**，是拿来出片的，所以版式直接按竖屏成片来做：
 抖音 / B站竖屏标准 **1080×1920**，盘面撑满宽度，上下留白放文字。
 
-### 视口与出片分辨率
+### 三个不同的「分辨率」，别混
 
 `project.godot`：
 
 ```ini
 [display]
+; ① 逻辑设计尺寸（画布的尺子）—— UI 里写死的像素都以它为基准
 window/size/viewport_width=1080
 window/size/viewport_height=1920
-window/size/window_width_override=540     ; 预览窗口，1080×1920 放不进 1080p 屏幕
+; ② 预览窗口大小（只影响屏幕，不进成片）—— 1080×1920 放不进 1080p 屏幕
+window/size/window_width_override=540
 window/size/window_height_override=960
-window/stretch/mode="viewport"            ; 见下面的说明
-window/stretch/aspect="keep"
+; ③ 出片分辨率（默认档）
+window/size/window_width_override.movie=1080
+window/size/window_height_override.movie=1920
+window/stretch/mode="canvas_items"        ; 见下面的说明
 ```
 
-> ⚠️ **必须是 `viewport` 拉伸模式**。官方文档：`disabled` / `canvas_items` 下
-> **出片分辨率由窗口尺寸决定**，那样 1080×1920 会被屏幕高度卡住、录不出全尺寸；
-> 只有 `viewport` 下由**视口**决定（"The size of the root Viewport is set precisely
-> to the base size specified in the Project Settings"）。
-> 窗口 override 只影响屏幕预览，不影响成片。
+| # | 名称 | 由谁决定 | 改它会怎样 |
+| --- | --- | --- | --- |
+| ① | **逻辑设计尺寸** | `window/size/viewport_*` | UI **不会跟着变大**，只是换了「一个像素代表多少内容」的尺子 |
+| ② | **预览窗口** | `window/size/window_*_override` | 只影响屏幕上那个窗口，不进成片 |
+| ③ | **出片分辨率** | `window_*_override.movie`（`canvas_items` 下） | 成片像素数 |
+
+> ⚠️ **必须是 `canvas_items` 拉伸模式。** 实测对比（两档都录 4K 后抽帧）：
+>
+> | 方案 | 盘面/画面宽 | 标题字号 / 画面高 |
+> | --- | --- | --- |
+> | 现状 1080 | 0.92 | `0.04375` |
+> | `viewport` 视口=4K | 0.92 ✅ | **`0.0219` ❌（小一半）** |
+> | `canvas_items` 窗口=4K | 0.92 ✅ | `0.04375` ✅ |
+>
+> 因为 `Camera2D.zoom` 由 `get_viewport_rect().size` 反推，**世界层会自动跟着视口变**，
+> 但 UI 是 `CanvasLayer` + 写死的像素，**不跟**。`canvas_items` 下逻辑尺寸保持
+> 1080×1920 不变（实测 `camera.zoom` 仍是 `0.7562`），引擎用一个 canvas 变换把
+> **所有东西**统一放大，UI 与字体一起跟上，而且 `Viewport.oversampling` 保证字体
+> 按目标尺寸光栅化、不糊。引擎自己的文档也把 `viewport` 描述成
+> *"results in pixelated image"*、`canvas_items` 是 *"better results"*。
+>
+> 所以升分辨率**一行 `.gd` 都不用改**。
+
+> ⚠️ 那两个 `.movie` 键**不能省**：`canvas_items` 下出片分辨率取 override，
+> 不写 `.movie` 就会按预览窗口的 540×960 出片（实测确认）。
+>
+> ⚠️ 命令行 `--resolution` **改不了出片分辨率**（实测：只改窗口，还会被显示器裁掉）。
 
 ### 构图怎么定的
 
-实测（1080×1920，默认 8 环）：
+实测（1080×1920，默认 12 环 —— 见 `Config.DEFAULT_CFG.rings_count`）：
 
 | 项目 | 实测值 |
 | --- | --- |
-| 相机 zoom | `1.08709` |
+| 相机 zoom | `0.75616` |
 | 盘面屏幕直径 | `993.6` px |
 | **占视口宽度** | **92.0%**（= `Config.PLAYFIELD_FILL`） |
 | 占视口高度 | 51.7% |
 | 上下留白 | 各 `463.2` px（合计 48.3% 高度） |
 | 盘心 vs 视口中心 | 偏心 `(0.0, 0.0)` px |
-| 球屏幕半径 | `13.05` px |
+| 球屏幕半径 | `9.07` px（= `BALL_WORLD_RADIUS` 12 × zoom `0.75616`） |
 
-留白里放三样东西，位置都是**占视口高度的比例**（`Config.LAYOUT_*_Y`），
-所以换成 1440×2560 也成立：
+留白里放三样东西，位置都是**占视口高度的比例**（`Config.LAYOUT_*_Y`）：
 
 - 顶部 `LAYOUT_TITLE_Y = 0.072` → `y=138`：游戏名 `BALL ESCAPE`
 - 顶部 `LAYOUT_HUD_Y = 0.145` → `y=278`：HUD（Wins 计数）
 - 底部 `LAYOUT_CELEBRATION_Y = 0.855` → `y=1642`：结算文字 `ESCAPED!`
   （彩屑受重力往下落，正好落在它周围）
+
+> ⚠️ 比例只解决**位置**、不解决**大小**。字号（`Config.FONT_*`）与侧栏宽
+> （`Config.SIDEBAR_WIDTH`）是**逻辑像素**，跟着①号「逻辑设计尺寸」走；
+> 只要拉伸模式是 `canvas_items`，换出片分辨率时它们会被 canvas 变换一并放大，
+> 不用你操心。反过来，若在 `viewport` 模式下改①号，它们就**不会**跟着变
+> —— 这正是「标题突然小一半」那个坑，见「竖屏版式」。
 
 **盘面占多少宽度**由 `Config.PLAYFIELD_FILL` 控制，相机 zoom 由它**反推**：
 
@@ -529,7 +561,7 @@ $env:APPDATA = 'D:\lg\else\videos-godot\.godot-userdata'   # 沙箱里必须，�
 | `--fixed-fps <fps>` | 改录制帧率（默认 60）。录 120/240 再降帧可做动态模糊 |
 | `--quit-after <N>` | 录 N 帧后退出。本项目**不需要**（自己会退）；注意 N 是**引擎总帧数** |
 | `--disable-vsync` | 可能加快写入（硬件够快时） |
-| `--resolution <W>x<H>` | 覆盖**窗口**尺寸。⚠️ 本项目是 `viewport` 拉伸模式，**出片分辨率由视口决定，这个开关改不了出片尺寸** |
+| `--resolution <W>x<H>` | 覆盖**窗口**尺寸。⚠️ **改不了出片分辨率**（实测：两种拉伸模式下都不影响成片，而且窗口会被显示器裁到 1924×1061） |
 
 > ⚠️ **绝对不要加 `--headless`** —— 见下面「必须用真实渲染器」。
 
@@ -551,7 +583,7 @@ $env:APPDATA = 'D:\lg\else\videos-godot\.godot-userdata'   # 沙箱里必须，�
 | --- | --- |
 | 录几局后自动退出 / 随机种子 / 是否隐藏制作工具 / 是否让结算播完 | `Config.MOVIE_*` |
 | 输出帧率 | `--fixed-fps 30`，或 Project Settings 的 `editor/movie_writer/fps`（默认 60） |
-| 输出分辨率 | = 视口尺寸 **1080×1920**（见「竖屏版式」）；改 `project.godot` 即可 |
+| 输出分辨率 | 默认 **1080×1920**；要 4K 见下面「两档出片分辨率」 |
 | 编码质量 / 关键帧间隔 / 音频 | Project Settings 的 `editor/movie_writer/*` |
 | 录制期间才生效的项目设置覆盖 | `project.godot` 里带 `.movie` 后缀的键 |
 
@@ -634,24 +666,55 @@ $ff = 'E:\JianyingPro\11.4.0.14410\ffmpeg.exe'
 > 官网还给了 PNG 序列合成（`-r 60 -i input%08d.png -i input.wav`）、
 > 裁剪（`-ss -t`）、降帧（`-r 30`）的写法。
 
-### 想比 1080×1920 更高的分辨率
+### 两档出片分辨率：1080×1920 / 4K 竖屏（2160×3840）
 
-本项目用的是 **`viewport` 拉伸模式**，所以**出片分辨率由视口决定，与窗口无关**
-—— 直接把 `project.godot` 里这两个值改大即可（例如 `2160×3840`）：
+默认档就是 1080×1920，和以前完全一样，命令不用改：
+
+```powershell
+& $exe --path godot-ballgame --write-movie captures/round.avi
+```
+
+要 4K 就放一个 `override.cfg` 再录，录完删掉即回到 1080：
+
+```powershell
+Copy-Item godot-ballgame\tools\tier_4k.cfg godot-ballgame\override.cfg
+& $exe --path godot-ballgame --write-movie captures/round_4k.avi
+Remove-Item godot-ballgame\override.cfg
+```
+
+`res://override.cfg` 是引擎**官方**的工程设置覆盖机制（本地离线文档
+`classes/class_projectsettings.rst.txt` 开头的 "Overriding"）：启动时读取，
+只覆盖文件里列出的键。所以它是一个**档位开关**，不用改 `project.godot`，
+也不进版本库（已写进 `.gitignore`）。
+
+`tools/tier_4k.cfg` 的内容就两行 —— 它们覆盖的是「出片分辨率」那一项
+（③号，见「三个不同的分辨率」）：
 
 ```ini
 [display]
-window/size/viewport_width=1080
-window/size/viewport_height=1920
+window/size/window_width_override.movie=2160
+window/size/window_height_override.movie=3840
 ```
 
-`window_width_override` / `window_height_override` 只影响**预览窗口**多大，
-改它不会改变出片尺寸。想「只在录制时用高分辨率」，可以用官方 feature tag
-在这两个键上加 `.movie` 后缀，实时游玩仍保持 1080×1920。
+带 `.movie` 后缀所以**只影响录制**，预览窗口仍是 540×960。
 
-> ⚠️ 反过来说：因为出片尺寸由视口决定，命令行 `--resolution` 在本项目里
-> **改不了出片分辨率**（它只改窗口）。官方文档也强调 `--resolution` 是给
-> `disabled` / `canvas_items` 拉伸模式用的。
+实测：
+
+| `project.godot` 的值 | `override.cfg` | 出片 | 预览窗口 |
+| --- | --- | --- | --- |
+| `.movie=1080×1920` | 无 | **1080×1920** ✅ | 540×960 |
+| `.movie=1080×1920` | `.movie=2160×3840` | **2160×3840** ✅ | 540×960 |
+| `.movie=1080×1920` | `.movie=2160×3840` + `--resolution` | 仍是 2160×3840（`--resolution` 无效） | — |
+
+> ⚠️ **不要用自定义 feature tag 来做档位。** 官方 `feature_tags.rst.txt` 写明
+> 自定义 tag **只在导出后生效**，编辑器二进制下（也就是这里的 `--write-movie` 用法）
+> 读不到。
+>
+> ⚠️ 4K 档下每帧像素是 1080 档的 **4 倍**，录制耗时和文件体积也大致翻几倍
+> （`.avi` 有 4GB 上限，4K 下连续录制余量小很多，一局没问题、连录多局要注意）。
+
+两档的**构图、UI 字号、侧栏宽度完全一致** —— 4K 只是多了 4 倍像素，
+不是重新排版。这一条是靠 `canvas_items` 拉伸模式保证的，理由见上面「竖屏版式」。
 
 ---
 

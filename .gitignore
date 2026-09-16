@@ -2,3 +2,7 @@
 # 重新生成：godot --path godot-ballgame --write-movie captures/round.avi
 captures/
 /.godot
+
+# 出片档位开关（引擎启动时读取的工程设置覆盖）。
+# 4K 档：Copy-Item tools/tier_4k.cfg override.cfg；用完删掉即回 1080。
+/override.cfg

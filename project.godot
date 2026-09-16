@@ -17,11 +17,23 @@ config/icon="res://icon.svg"
 
 [display]
 
+; ⚠️ 本工程有三个不同的「分辨率」，别混：
+;   viewport_*         逻辑设计尺寸（画布的尺子）。FONT_* / SIDEBAR_WIDTH 这些
+;                      写死的像素都以它为基准 —— 改它不会让 UI 跟着变大，
+;                      只会改变「一个像素代表多少内容」。
+;   window_*_override  预览窗口大小（只影响屏幕，不进成片）。
+;   ..._override.movie 出片分辨率。canvas_items 拉伸模式下由它决定；viewport
+;                      模式下由 viewport_* 决定。实测 `--resolution` 对出片
+;                      **无效**（只改窗口，还会被显示器裁掉）。
+; 两档位（1080×1920 / 4K 竖屏 2160×3840）靠 override.cfg 切，见 README
+; 「两档出片分辨率」一节；模板在 tools/tier_4k.cfg。
 window/size/viewport_width=1080
 window/size/viewport_height=1920
 window/size/window_width_override=540
 window/size/window_height_override=960
-window/stretch/mode="viewport"
+window/size/window_width_override.movie=1080
+window/size/window_height_override.movie=1920
+window/stretch/mode="canvas_items"
 
 [editor]
 
